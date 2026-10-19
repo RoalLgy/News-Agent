@@ -570,7 +570,7 @@ export default function App() {
                       }
                     />
                     <Terms
-                      label="GDELT 英文检索词（可选）"
+                      label="英文补充检索词（DDGS / GDELT，可选）"
                       hint="常见话题会自动映射；其他中文专有词可在此补充英文名称。"
                       values={preferences.subscription.gdelt_keywords}
                       onChange={(gdelt_keywords) =>
@@ -857,7 +857,7 @@ export default function App() {
                         </span>
                         <div>
                           <h2>新闻发现渠道</h2>
-                          <p>免费来源按频率采集；来源可用性取决于部署网络与上游服务。</p>
+                          <p>Google RSS 采集中文新闻，DDGS 补充搜索；可分别设置采集频率。</p>
                         </div>
                       </div>
                       {config.sources.sources.map((source, index) => (

@@ -117,6 +117,10 @@ class JsonStore:
                     key = (discovery.provider, discovery.query_id)
                     if key in known:
                         known[key].last_seen_at = discovery.last_seen_at
+                        if discovery.backend:
+                            known[key].backend = discovery.backend
+                            known[key].search_term = discovery.search_term
+                            known[key].published_at_raw = discovery.published_at_raw
                     else:
                         known[key] = discovery
                 existing.discoveries = list(known.values())

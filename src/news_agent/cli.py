@@ -32,7 +32,7 @@ def parser() -> argparse.ArgumentParser:
     prefs.add_argument("--topics", nargs="*")
     prefs.add_argument("--keywords", nargs="*")
     prefs.add_argument("--exclude", nargs="*")
-    prefs.add_argument("--gdelt-keywords", nargs="*")
+    prefs.add_argument("--gdelt-keywords", nargs="*", help="DDGS / GDELT 的英文补充检索词")
     prefs.add_argument("--items", type=int)
     prefs.add_argument("--hours", type=int)
     prefs.add_argument("--daily", choices=["on", "off"])

@@ -14,6 +14,7 @@ import feedparser
 import trafilatura
 from lxml import html as lxml_html
 
+from .ddgs_search import DDGSSearchError, search_news
 from .models import Article, Content, Discovery, Publisher, Source, utcnow
 from .network import SourceRateLimited, fetch_bytes, http_client
 from .news import article_id, canonical_url, query_plan
@@ -199,23 +200,37 @@ def collect(store: JsonStore, settings: Settings, *, due_only: bool = False, bac
                 if wait > 0:
                     time.sleep(wait)
                 try:
-                    source_stats["requests"] += 1
                     hours = (
                         min(168, max(24, preferences.subscription.lookback_hours))
                         if backfill or not old
                         else 6
                     )
+                    if source.kind == "ddgs":
+                        outcome = search_news(
+                            source,
+                            query,
+                            proxy=settings.proxy,
+                            hours=hours,
+                            languages=preferences.subscription.languages,
+                            now=now,
+                        )
+                        articles = outcome.articles
+                        source_stats["requests"] += outcome.requests
+                        stats["warnings"].extend(f"{source.name}: {w}" for w in outcome.warnings)
+                    else:
+                        source_stats["requests"] += 1
                     if source.kind == "bing_rss":
                         url = "https://www.bing.com/news/search?" + urlencode(
                             {"q": query["term"], "format": "rss"}
                         )
                     elif source.kind == "google_rss":
+                        chinese = "zh" in preferences.subscription.languages
                         url = "https://news.google.com/rss/search?" + urlencode(
                             {
                                 "q": f"{query['term']} when:{hours}h",
-                                "hl": "zh-CN",
-                                "gl": "CN",
-                                "ceid": "CN:zh-Hans",
+                                "hl": "zh-CN" if chinese else "en-US",
+                                "gl": "CN" if chinese else "US",
+                                "ceid": "CN:zh-Hans" if chinese else "US:en",
                             }
                         )
                     elif source.kind == "gdelt":
@@ -234,14 +249,15 @@ def collect(store: JsonStore, settings: Settings, *, due_only: bool = False, bac
                                 "sort": "DateDesc",
                             }
                         )
-                    else:
+                    elif source.kind == "rss":
                         url = source.url
-                    payload, _ = fetch_bytes(client, url)
-                    if source.kind == "gdelt":
-                        articles, truncated = gdelt_articles(payload, source, query, now)
-                        source_stats["truncated"] |= truncated
-                    else:
-                        articles = rss_articles(payload, source, query, now)
+                    if source.kind != "ddgs":
+                        payload, _ = fetch_bytes(client, url)
+                        if source.kind == "gdelt":
+                            articles, truncated = gdelt_articles(payload, source, query, now)
+                            source_stats["truncated"] |= truncated
+                        else:
+                            articles = rss_articles(payload, source, query, now)
                     source_stats["found"] += len(articles)
                     for article in articles:
                         if article.published_at and article.published_at < now - timedelta(
@@ -252,6 +268,8 @@ def collect(store: JsonStore, settings: Settings, *, due_only: bool = False, bac
                         stats["new" if new else "updated"] += 1
                         extraction_ids.append(article.id)
                 except Exception as exc:
+                    if isinstance(exc, DDGSSearchError):
+                        source_stats["requests"] += exc.requests
                     source_stats["errors"].append(str(exc)[:300])
                     if isinstance(exc, SourceRateLimited):
                         source_stats["next_allowed_at"] = (

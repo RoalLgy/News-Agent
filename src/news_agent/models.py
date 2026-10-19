@@ -74,7 +74,7 @@ class Preferences(Model):
 
 class Source(Model):
     id: str = Field(pattern=r"^[a-z0-9_-]{1,40}$")
-    kind: Literal["bing_rss", "google_rss", "gdelt", "rss"]
+    kind: Literal["bing_rss", "google_rss", "gdelt", "rss", "ddgs"]
     name: str = Field(max_length=100)
     enabled: bool = True
     interval_minutes: int = Field(default=60, ge=15, le=1440)
@@ -86,9 +86,10 @@ class Sources(Model):
     schema_version: Literal[1] = 1
     sources: list[Source] = Field(
         default_factory=lambda: [
-            Source(id="bing", kind="bing_rss", name="Bing News RSS"),
-            Source(id="gdelt", kind="gdelt", name="GDELT", interval_minutes=120),
-            Source(id="google", kind="google_rss", name="Google News RSS", enabled=False),
+            Source(id="google", kind="google_rss", name="Google News RSS"),
+            Source(id="ddgs", kind="ddgs", name="DDGS 补充搜索", interval_minutes=120),
+            Source(id="bing", kind="bing_rss", name="Bing News RSS", enabled=False),
+            Source(id="gdelt", kind="gdelt", name="GDELT", interval_minutes=120, enabled=False),
         ],
         max_length=20,
     )
@@ -138,6 +139,9 @@ class Discovery(Model):
     provider: str
     query_id: str
     result_url: str
+    backend: str = ""
+    search_term: str = ""
+    published_at_raw: str = ""
     provider_seen_at: datetime | None = None
     first_seen_at: datetime = Field(default_factory=utcnow)
     last_seen_at: datetime = Field(default_factory=utcnow)

@@ -10,6 +10,7 @@ click==8.5.0
 courlan==1.4.0
 coverage==7.16.2
 dateparser==1.4.3
+ddgs==9.16.0
 distro==1.9.0
 fastapi==0.146.0
 feedparser==6.0.14
@@ -45,6 +46,7 @@ orjson==3.13.0
 ormsgpack==1.13.0
 packaging==26.3
 pluggy==1.7.0
+primp==2.0.1
 pydantic==2.14.1
 pydantic_core==2.50.1
 Pygments==2.21.0

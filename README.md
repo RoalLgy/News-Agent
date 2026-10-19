@@ -7,7 +7,7 @@
 ## 能力
 
 - **通用订阅**：话题、关注关键词、排除关键词、中文/英文新闻、时间范围、条数；AI 是默认模板，也可以订阅财经、汽车、体育等。
-- **免费新闻发现**：Bing News RSS、GDELT DOC 2.0、可选 Google News RSS、自定义 RSS。无需新闻搜索 API Key。
+- **免费新闻发现**：默认使用 Google News RSS 获取中文新闻，DDGS 补充搜索（DuckDuckGo → Yahoo）。Bing News RSS、GDELT 和自定义 RSS 可选，无需新闻搜索 API Key。
 - **后台采集**：每小时或每两小时运行，订阅变更后补采；每天回补近期内容，避免仅按整点窗口抓取造成遗漏。
 - **正文提取**：Trafilatura 本地提取，保留摘要和提取状态。不能获取正文时不会凭标题编造。
 - **LangChain 工具 Agent**：实际注册并使用 `list_dir`、`read_file`、`search_content`、`write_file`、`bash` 五个工具。
@@ -92,7 +92,7 @@ newsbrief --data-dir ./data --json status
 | `newsbrief prefs` | 查看完整偏好 |
 | `newsbrief prefs --file preferences.json` | 校验并导入完整偏好 |
 | `newsbrief prefs --topics "财经" --keywords "半导体" --items 8 --hours 48` | 修改订阅 |
-| `newsbrief prefs --gdelt-keywords "semiconductor" "BYD"` | 为 GDELT 补充英文检索词 |
+| `newsbrief prefs --gdelt-keywords "semiconductor" "BYD"` | 为 DDGS / GDELT 补充英文检索词 |
 | `newsbrief prefs --email "you@example.com" --daily on --mail on --time 08:00` | 开启每日生成与邮件推送 |
 | `newsbrief prefs --daily off --mail off` | 暂停每日生成与推送 |
 | `newsbrief collect` | 立即补采近期新闻 |
@@ -184,7 +184,7 @@ data/
     "error": ""
   },
   "discoveries": [{
-    "provider": "bing",
+    "provider": "google",
     "query_id": "查询ID",
     "result_url": "https://example.org/news",
     "provider_seen_at": null,
@@ -194,15 +194,17 @@ data/
 }
 ```
 
+DDGS 发现记录还保存 `backend`、`search_term` 和 `published_at_raw`，可追溯实际搜索后端、检索词和原始时间；`published_at_source` 标记为 `ddgs:duckduckgo` 或 `ddgs:yahoo`。只有包含时区的完整时间才能作为发布时间，无法解析时保持为空，不使用抓取时间代替。
+
 原文媒体与发现渠道分开。GDELT 的 `seendate` 只进入 `discoveries.provider_seen_at`，不会直接成为 `published_at`。时间统一带时区保存，页面和任务计划使用北京时间。
 
 一条新闻只有标题时不会进入简报；需有至少一定长度的摘要或正文，以及可靠的发布时间。无发布时间的线索仍可在新闻资料库查看。网页元数据只有日期、没有具体时间/时区时，当前实现保守地保持待确认。
 
 ## 采集、筛选与清理
 
-1. 从关键词和话题生成稳定查询，默认最多 6 组。常见中文词映射为 GDELT 英文检索词，其他词通过 `gdelt_keywords` 补充。
-2. Bing / Google RSS 检索中文或原始关键词；GDELT 使用英文查询和语言条件。
-3. 首次/手动补采覆盖订阅时间范围（至少 24 小时）；常规轮询重查最近 6 小时；每天重新回补。
+1. 从关键词和话题生成稳定查询，默认最多 6 组。常见中文词映射为 DDGS / GDELT 英文检索词，其他词通过 `gdelt_keywords` 补充。
+2. 默认启用 Google News RSS（每小时）和 DDGS（每两小时）。Google 使用中文地区入口；仅订阅英文时切换英文入口。DDGS 在允许英文新闻时优先使用英文映射词，依次尝试 DuckDuckGo、Yahoo，前者失败或无可用结果时切换后者；只订阅中文时保留原词并过滤英文结果。Bing / GDELT 默认关闭，可在前端重新开启。
+3. 首次/手动补采覆盖订阅时间范围（至少 24 小时）；Google / GDELT 常规轮询重查最近 6 小时，每天回补。DDGS 使用一天或一周的粗粒度搜索范围，每个后端最多返回 20 条，生成简报时再按实际发布时间过滤。DDGS 的 `requests` 统计为后端搜索调用次数，单次调用可能包含多个内部 HTTP 请求。
 4. 按规范化 URL 哈希合并，去除跟踪参数；同一渠道/查询的发现记录合并更新时间。
 5. 正文提取每轮默认最多 30 篇，每篇最多尝试 3 次；每篇最多保存 30000 字符正文。
 6. 生成时按时间、语言、排除词、相关性和内容完整度准备最多 60 篇候选，交给 Agent 阅读、筛选、合并事件、生成草稿。
@@ -210,6 +212,20 @@ data/
 8. 默认每日 03:00 清理超过 7 天的原始新闻，运行文件默认保留 30 天，历史简报独立长期保留。
 
 写入通过同目录临时文件 + `fsync` + 原子替换完成，读改写过程加文件锁。同类新闻维护任务互斥；生成任务使用副本，不会因清理丢失正在阅读的资料。
+
+新安装默认启用 Google / DDGS。升级时已有 `config/sources.json` 不会自动被默认值覆盖，以保留自定义来源和开关；当前工作区已完成切换。其他已有数据目录可将 Google 的 `enabled` 设为 `true`、Bing / GDELT 设为 `false`，并在 `sources` 数组中添加以下来源，然后重启服务：
+
+```json
+{
+  "id": "ddgs",
+  "kind": "ddgs",
+  "name": "DDGS 补充搜索",
+  "enabled": true,
+  "interval_minutes": 120,
+  "request_interval_seconds": 5,
+  "url": ""
+}
+```
 
 **第一版边界：**
 
@@ -222,6 +238,23 @@ data/
 - 单个配置 JSON 损坏会明确报错，需要从备份恢复；损坏的新闻条目会跳过并记录日志。
 - 无登录版本默认只监听本机；不要直接暴露到公共网络。远程使用可通过 SSH 隧道，或后续增加认证。
 - 后台调度进程只允许一个实例持锁运行。不要使用多个 Uvicorn worker；独立 `worker` 与 `serve` 同时运行时只有一方持有调度器。
+
+## 单独检查新闻接口
+
+在项目根目录运行；不需要启动前端或配置模型密钥：
+
+```bash
+source .venv/bin/activate
+python scripts/check_news_sources.py
+python scripts/check_news_sources.py --source google --keyword "新能源汽车"
+python scripts/check_news_sources.py --source ddgs --keyword "新能源汽车" --gdelt-keyword "electric vehicle"
+python scripts/check_news_sources.py --source gdelt --gdelt-keyword "electric vehicle"
+python scripts/check_news_sources.py --direct
+```
+
+脚本默认读取 `.env` 中的 `NEWS_BRIEF_HTTP_PROXY`，逐个测试 Google RSS、DDGS、Bing、Bing 中国域名和 GDELT，输出 HTTP 来源的状态、最终 URL、响应类型，以及解析条数、示例标题、耗时和错误；DDGS 输出搜索调用次数、实际后端和回退提示；解析失败时显示部分响应正文以识别 HTML 页面。它使用生产采集器的网络函数，不保存新闻、不修改采集退避状态，也不提取新闻原文。
+
+`--direct` 仅表示不显式使用 HTTP 代理，系统 TUN 仍可能影响网络。如果公网域名解析为 Fake-IP/保留地址，脚本会保持生产环境的地址检查并报错；这时配置实际 HTTP 代理，或在代理软件中调整相关域名的 DNS/分流规则。不要以 HTTP 200 单独判断成功：RSS 应解析出有效订阅结构，GDELT 应返回包含 `articles` 数组的 JSON；`ok: true` 且 `items: 0` 表示接口可解析但该查询没有新闻。所有来源均未通过时退出码为 1；部分成功时退出码为 0，仍应逐项检查 `ok`。
 
 ## Agent 工具
 
