@@ -15,4 +15,4 @@ frontend/dist/
 .DS_Store
 *.log
 *.tsbuildinfo
-
+*.mp4
