@@ -1,0 +1,16 @@
+services:
+  newsbrief:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file: .env
+    environment:
+      NEWS_BRIEF_DATA_DIR: /app/data
+    volumes:
+      - newsbrief-data:/app/data
+    restart: unless-stopped
+    stop_grace_period: 180s
+
+volumes:
+  newsbrief-data:
+
